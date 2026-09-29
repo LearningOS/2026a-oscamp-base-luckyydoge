@@ -38,7 +38,7 @@
 //! - fd number reuse strategy (find smallest free slot)
 //! - `Arc` reference counting and resource release
 
-use std::sync::Arc;
+use std::{f32::consts::TAU, sync::Arc};
 
 /// File abstraction trait — all "files" in the kernel (regular files, pipes, sockets) implement this
 pub trait File: Send + Sync {
@@ -51,13 +51,16 @@ pub struct FdTable {
     // TODO: Design the internal structure
     // Hint: use Vec<Option<Arc<dyn File>>>
     //       the index is the fd number, None means the fd is closed or unallocated
+    table: Vec<Option<Arc<dyn File>>>,
 }
 
 impl FdTable {
     /// Create an empty fd table
     pub fn new() -> Self {
         // TODO
-        todo!()
+        Self {
+            table: vec![],
+        }
     }
 
     /// Allocate a new fd, return the fd number.
@@ -65,25 +68,50 @@ impl FdTable {
     /// Prefers reusing the smallest closed fd number; if no free slot, appends to the end.
     pub fn alloc(&mut self, file: Arc<dyn File>) -> usize {
         // TODO
-        todo!()
+        for (i, fd) in self.table.iter_mut().enumerate() {
+            if let None = fd {
+                *fd = Some(file);
+                return i;
+            }
+        }
+        self.table.push(Some(file));
+        self.table.len() - 1
     }
 
     /// Get the file object for an fd. Returns None if the fd doesn't exist or is closed.
     pub fn get(&self, fd: usize) -> Option<Arc<dyn File>> {
         // TODO
-        todo!()
+        if fd >= self.table.len() {
+            return None;
+        }
+        <Option<Arc<dyn File>> as Clone>::clone(&self.table[fd])
     }
 
     /// Close an fd. Returns true on success, false if the fd doesn't exist or is already closed.
     pub fn close(&mut self, fd: usize) -> bool {
         // TODO
-        todo!()
+        if fd >= self.table.len()  {
+            return false;
+        }
+
+        match self.table[fd] {
+            Some(_) => {
+                self.table[fd] = None;
+                true
+            },
+            None => false,
+        }
     }
 
     /// Return the number of currently allocated fds (excluding closed ones)
     pub fn count(&self) -> usize {
         // TODO
-        todo!()
+        self.table.iter().map(|x| {
+            match x {
+                None => 0,
+                Some(_) => 1,
+            }
+        }).sum()
     }
 }
 
