@@ -2,8 +2,8 @@
   "schema": 1,
   "courseId": 2074,
   "repository": "LearningOS/2026a-oscamp-base-luckyydoge",
-  "commit": "5b3a038a4fb1349cccfa5162f6ae48013f79e65a",
-  "score": 60,
+  "commit": "dc9751b6ff2a8666d600dc3367ced56a660637cf",
+  "score": 72,
   "totalScore": 100,
   "exercises": [
     {
@@ -107,16 +107,16 @@
     {
       "name": "stack_coroutine",
       "max": 6,
-      "score": 0,
-      "status": "fail",
-      "exitCode": 101
+      "score": 6,
+      "status": "pass",
+      "exitCode": 0
     },
     {
       "name": "green_threads",
       "max": 6,
-      "score": 0,
-      "status": "fail",
-      "exitCode": 101
+      "score": 6,
+      "status": "pass",
+      "exitCode": 0
     },
     {
       "name": "basic_future",
@@ -176,9 +176,9 @@
     }
   ],
   "student": "luckyydoge",
-  "runId": "36563408814",
+  "runId": "36677874771",
   "runAttempt": "1",
   "upload": {
-    "status": "accepted"
+    "status": "pending"
   }
 }
