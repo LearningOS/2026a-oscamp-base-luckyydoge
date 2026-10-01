@@ -19,12 +19,35 @@
 //! └──────────┴───────────┴───────────┴───────────┘
 //! ```
 
-use std::collections::HashMap;
+use std::{collections::HashMap};
 
 /// 页大小 4KB
 pub const PAGE_SIZE: usize = 4096;
 /// 每级页表有 512 个条目 (2^9)
 pub const PT_ENTRIES: usize = 512;
+
+pub const PAGE_MASK: u64 = PAGE_SIZE as u64 - 1;
+pub const PAGE_SHIFT: u64 = 12;
+
+fn pa_to_ppn(pa: u64) -> u64  {
+    pa >> PAGE_SHIFT
+}
+
+fn ppn_to_pa(ppn: u64) -> u64  {
+    ppn << PAGE_SHIFT
+}
+
+fn align_down(pa: u64) -> u64  {
+    pa & !PAGE_MASK
+}
+
+fn make_pte(ppn: u64, flags: u64) -> u64 {
+    (ppn << PPN_SHIFT) as u64 + flags
+}
+
+fn pte_to_ppn(pte: u64) -> u64  {
+    pte >> PPN_SHIFT
+}
 
 /// PTE 标志位
 pub const PTE_V: u64 = 1 << 0;
@@ -75,6 +98,7 @@ pub enum TranslateResult {
     PageFault,
 }
 
+
 impl Sv39PageTable {
     pub fn new() -> Self {
         let mut pt = Self {
@@ -113,20 +137,33 @@ impl Sv39PageTable {
     /// - `pa`: 物理地址（会自动对齐到页边界）
     /// - `flags`: 标志位（如 PTE_V | PTE_R | PTE_W）
     pub fn map_page(&mut self, va: u64, pa: u64, flags: u64) {
+        print!("map: va {:x} to pa {:x}\n", va, pa);
         // TODO: 实现三级页表的映射
         //
         // 提示：你需要从根页表开始，逐级向下遍历页表层级（level 2 → level 1 → level 0）。
         // 对于中间层级（level 2 和 level 1），如果对应 VPN 的页表项（PTE）无效（PTE_V == 0），
         // 则需要分配一个新的页表节点（使用 alloc_node），并将新节点的 PPN 写入当前 PTE（仅设置 PTE_V 标志）。
         // 最后在 level 0 的 PTE 中写入目标物理页号（pa >> 12）和 flags。
-        fn find(page_table_node: &mut PageTableNode, level: usize, va: u64,
-            pa: u64, flags: u64) {
-            let index = Sv39PageTable::extract_vpn(va, level);
+        self._map_page(self.root_ppn, 2, va, pa, flags);
+    }
+    fn _map_page(&mut self, node_ppn: u64, level: usize, va: u64, pa: u64, flags: u64) {
+        let index = Sv39PageTable::extract_vpn(va, level);
+        let mut next_node_ppn: u64;
+        {
+            let node = self.nodes.get_mut(&node_ppn).unwrap();
             if level == 0 {
-                page_table_node.entries[index] = (pa >> 12) + flags;
+                node.entries[index] = make_pte(pa_to_ppn(align_down(pa)), flags);
+                return;
             }
-            
+            next_node_ppn = pte_to_ppn(node.entries[index]);
         }
+        if !self.nodes.contains_key(&next_node_ppn) {
+            next_node_ppn = self.alloc_node();
+            if let Some(node) = self.nodes.get_mut(&node_ppn) {
+                node.entries[index] = make_pte(next_node_ppn, PTE_V);
+            }
+        }
+        self._map_page(next_node_ppn, level - 1, va, pa, flags)
     }
 
     /// 遍历三级页表，将虚拟地址翻译为物理地址。
@@ -148,7 +185,30 @@ impl Sv39PageTable {
         // 如果 PTE 是叶节点（即 R、W、X 标志位中有至少一个被置位），则可以直接使用该 PTE 中的物理页号（PPN）计算最终的物理地址。
         // 否则，该 PTE 指向下一级页表节点，继续遍历下一级。
         // 遍历到 level 0 时，PTE 必须是叶节点。
-        todo!()
+        print!("translate {:x}\n", va);
+        self._translate(va, 2, self.root_ppn)
+    }
+    fn _translate(&self, va: u64, level: usize, node_ppn: u64) -> TranslateResult  {
+        let index = Sv39PageTable::extract_vpn(va, level);
+        match self.nodes.get(&node_ppn) {
+            None => TranslateResult::PageFault,
+            Some(node) => {
+                let pte = node.entries[index];
+                if pte & PTE_V == 0 {
+                    return TranslateResult::PageFault;
+                }
+                let next_ppn = pte_to_ppn(pte);
+                let offset = va & ((1 << (12 + 9 * level)) as u64 - 1);
+                let check = PTE_R | PTE_W | PTE_X;
+                if check & pte > 0 || level == 0 {
+                    print!("translate pa {:x}",offset + (next_ppn << 12) );
+                    return TranslateResult::Ok(offset + (next_ppn << 12));
+                }
+
+                self._translate(va, level - 1, next_ppn)
+
+            },
+        }
     }
 
     /// 建立大页映射（2MB superpage，在 level 1 设叶子 PTE）。
@@ -167,7 +227,29 @@ impl Sv39PageTable {
         // 你需要在 level 2 找到或创建中间页表节点，然后在 level 1 写入叶子 PTE。
         // 注意大页的物理页号计算方式与普通页相同（pa >> 12），
         // 但翻译时 offset 包含虚拟地址的低 21 位（VPN[0] 部分 + 12 位页内偏移）。
-        todo!()
+
+        self._map_superpage(2, va, pa, flags, self.root_ppn);
+    }
+
+    fn _map_superpage(&mut self, level: usize, va: u64, pa: u64, flags: u64, node_ppn: u64) {
+        let mut next_node_ppn: u64;
+        let index = Sv39PageTable::extract_vpn(va, level);
+        {
+            let node = self.nodes.get_mut(&node_ppn).unwrap();
+            if level == 1 {
+                node.entries[index] = make_pte(pa_to_ppn(align_down(pa)), flags);
+                return;
+            }
+            next_node_ppn = pte_to_ppn(node.entries[index]);
+        }
+        {
+            if !self.nodes.contains_key(&next_node_ppn) {
+                next_node_ppn = self.alloc_node();
+                let next_node = self.nodes.get_mut(&node_ppn).unwrap();
+                next_node.entries[index] =  make_pte(next_node_ppn, PTE_V);
+            }
+        }
+        self._map_superpage(level - 1, va, pa, flags, next_node_ppn);
     }
 }
 
