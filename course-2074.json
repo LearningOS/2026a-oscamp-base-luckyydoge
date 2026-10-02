@@ -2,8 +2,8 @@
   "schema": 1,
   "courseId": 2074,
   "repository": "LearningOS/2026a-oscamp-base-luckyydoge",
-  "commit": "855e78ab76e4017b1eb006f192dec8018af9c15e",
-  "score": 93,
+  "commit": "7ada56eed549fabf124275e0d4ead07a9350add4",
+  "score": 100,
   "totalScore": 100,
   "exercises": [
     {
@@ -163,22 +163,22 @@
     {
       "name": "multi_level_pt",
       "max": 4,
-      "score": 0,
-      "status": "fail",
-      "exitCode": 101
+      "score": 4,
+      "status": "pass",
+      "exitCode": 0
     },
     {
       "name": "tlb_sim",
       "max": 3,
-      "score": 0,
-      "status": "fail",
-      "exitCode": 101
+      "score": 3,
+      "status": "pass",
+      "exitCode": 0
     }
   ],
   "student": "luckyydoge",
-  "runId": "36700008283",
+  "runId": "37025694257",
   "runAttempt": "1",
   "upload": {
-    "status": "accepted"
+    "status": "pending"
   }
 }
